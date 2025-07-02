@@ -9,7 +9,6 @@ interface ProfileCardProps {
 }
 
 export default function ProfileCard({ name, setName }: ProfileCardProps) {
-  const [profileImage, setProfileImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
 
   // Editable Fields
@@ -30,7 +29,6 @@ export default function ProfileCard({ name, setName }: ProfileCardProps) {
         alert('File size exceeds 10MB. Please choose a smaller file.')
         return
       }
-      setProfileImage(file)
       setImagePreview(URL.createObjectURL(file))
     }
   }
