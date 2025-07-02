@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { format } from 'timeago.js'
-import { Card, CardContent } from '@/components/ui/card'
 import ProfileCard from '@/components/ui/profilecard'
 
 interface Post {
