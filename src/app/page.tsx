@@ -1,103 +1,211 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { format } from 'timeago.js'
+import { Card, CardContent } from '@/components/ui/card'
+import ProfileCard from '@/components/ui/profilecard'
+
+interface Post {
+  id: string
+  user_id: string
+  name: string
+  body: string
+  created_at: string
+  photo_url?: string // ✅ Added photo_url field
+}
+
+export default function WallPage() {
+  const [body, setBody] = useState('')
+  const [posts, setPosts] = useState<Post[]>([])
+  const [name, setName] = useState('Aldrich Aranzamendez')
+
+  // ✅ New states for photo upload
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchPosts()
+
+    const channel = supabase
+      .channel('realtime:posts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
+        setPosts((prev) => [payload.new as Post, ...prev])
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  async function fetchPosts() {
+    const { data } = await supabase
+      .from('posts')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (data) {
+      setPosts(data)
+    }
+  }
+
+async function handleShare() {
+  if (body.trim() === '' && !photoFile) return // Prevent empty posts
+
+  let photoUrl = ''
+
+  // ✅ Upload photo if selected
+  if (photoFile) {
+    const uniqueFileName = `photo-${Date.now()}-${crypto.randomUUID()}`
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('post-photos')
+      .upload(uniqueFileName, photoFile, { cacheControl: '3600', upsert: false })
+
+    if (uploadError || !uploadData) {
+      console.error('Photo upload failed:', uploadError)
+      alert('Photo upload failed. Please try again.')
+      return
+    }
+
+    // ✅ Get the public URL properly
+    const { publicUrl } = supabase
+      .storage
+      .from('post-photos')
+      .getPublicUrl(uploadData.path).data
+
+    photoUrl = publicUrl
+  }
+
+  // ✅ Insert post to database and return the inserted row
+  const { data: insertData, error: insertError } = await supabase
+    .from('posts')
+    .insert([{
+      user_id: crypto.randomUUID(),
+      name: name,
+      body: body.trim(),
+      photo_url: photoUrl
+    }])
+    .select()
+
+if (insertError) {
+  console.error('Error sharing post:', insertError)
+  alert(`Post upload failed: ${insertError.message}`)
+  return
+}
+
+
+  if (!insertData || insertData.length === 0) {
+    console.error('Post insert returned no data')
+    alert('Post upload failed. Please try again.')
+    return
+  }
+
+  // ✅ Instead of refetching, append the new post directly
+  setPosts(prev => [insertData[0], ...prev])
+
+  setBody('')
+  setPhotoFile(null)
+  setPhotoPreview(null)
+}
+
+
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="flex justify-center p-4 min-h-screen bg-gray-100">
+      <div className="flex w-full max-w-6xl bg-white rounded shadow-lg p-6 space-x-6">
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        {/* Left Sidebar */}
+        <div className="w-1/4">
+          <ProfileCard name={name} setName={setName} />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Right Main Content */}
+        <div className="flex-1 space-y-4">
+          <h1 className="text-2xl font-bold">{name}</h1>
+
+          {/* Input Section */}
+          <div className="flex flex-col space-y-2 border p-4 rounded-lg">
+  {/* Text Input */}
+  <textarea
+    className="w-full border-2 border-dashed border-black rounded p-2 min-h-[80px]"
+    placeholder="What's on your mind?"
+    value={body}
+    onChange={(e) => setBody(e.target.value)}
+    maxLength={280}
+  />
+  <p className="text-xs text-gray-500">{280 - body.length} characters remaining</p>
+
+  {/* Upload Photo UI */}
+  <div
+    onClick={() => document.getElementById('post-photo-input')?.click()}
+    className="border-2 border-dashed border-gray-400 rounded p-4 text-center cursor-pointer hover:bg-gray-50"
+  >
+    {photoPreview ? (
+      <img src={photoPreview} alt="Preview" className="w-full max-w-xs mx-auto rounded" />
+    ) : (
+      <div className="flex flex-col items-center justify-center text-gray-500">
+        <span className="text-2xl">🖼️</span>
+        <span className="mt-2">Click to add photo (optional)</span>
+        <span className="text-xs text-gray-400">JPG, PNG, GIF up to 5MB</span>
+      </div>
+    )}
+  </div>
+
+  {/* Hidden File Input */}
+  <input
+    id="post-photo-input"
+    type="file"
+    accept="image/*"
+    onChange={(e) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        setPhotoFile(file)
+        setPhotoPreview(URL.createObjectURL(file))
+      }
+    }}
+    className="hidden"
+  />
+
+  {/* Share Button Positioned Bottom Right */}
+  <div className="flex justify-end">
+    <Button
+      onClick={handleShare}
+      className="bg-blue-600 hover:bg-blue-700 font-bold text-sm px-4 py-1"
+      disabled={body.trim() === '' && !photoFile} // Disable if empty
+    >
+      Share
+    </Button>
+  </div>
+</div>
+
+
+          {/* Posts Feed */}
+          <div className="space-y-6">
+            {posts.map((post) => (
+              <div key={post.id} className="border-t pt-4">
+                {/* Name and Time Row */}
+                <div className="flex justify-between items-center mb-1">
+                  <p className="font-bold">{post.name}</p>
+                  <p className="text-sm text-gray-500">{format(post.created_at)}</p>
+                </div>
+
+                {/* Post Body */}
+                <p>{post.body}</p>
+
+                {/* ✅ Display Photo if Exists */}
+                {post.photo_url && (
+                  <img src={post.photo_url} alt="Post" className="w-full max-w-xs mt-2 rounded" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
     </div>
-  );
+  )
 }
